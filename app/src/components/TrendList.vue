@@ -7,7 +7,11 @@
         v-for="tab in categoryTabs"
         :key="tab.query"
         :class="['tab-button', { active: currentCategory === tab.query }]"
-        @click="() => { currentCategory = tab.query; fetchVideos(); }"
+        @click="() => {
+          currentCategory = tab.query;
+          currentRange = tab.range;
+          fetchVideos();
+        }"
       >
         {{ tab.label }}
       </button>
@@ -18,10 +22,11 @@
       <button
         v-for="tab in seasonTabs"
         :key="tab.label"
-        :class="['tab-button', { active: currentSeason === tab.season && currentYear === tab.year }]"
+        :class="['tab-button', { active: currentSeason === tab.season && currentRange === tab.range && currentYear === tab.year }]"
         @click="() => {
           currentSeason = tab.season;
           currentYear = tab.year;
+          currentRange = tab.range;
           fetchVideos();
         }"
       >
@@ -74,7 +79,8 @@ const categoryTabs = [
 ];
 
 const seasonTabs = [
-  { label: '直近', season: 'recent' },
+  { label: '直近（７日）', season: 'recent', range: 7 },
+  { label: '直近（半年）', season: 'recent', range: 180 },
   { label: '2025春', season: 'spring', year: '2025' },
   { label: '2024冬', season: 'winter', year: '2024' },
   { label: '2024秋', season: 'fall', year: '2024' },
@@ -93,6 +99,7 @@ const seasonTabs = [
 const currentCategory = ref(categoryTabs[0].query);
 const currentSeason = ref(seasonTabs[0].season);
 const currentYear = ref(seasonTabs[0].year);
+const currentRange = ref(seasonTabs[0].range);
 const currentPage = ref(1);
 const videos = ref([]);
 const loading = ref(false);
@@ -104,6 +111,7 @@ const fetchVideos = async () => {
   params.videoType = currentCategory.value;
   if (currentSeason.value == 'recent') {
     params.mode = 'recent';
+    params.range = currentRange.value;
   }
   else {
     params.mode = 'normal';
@@ -118,7 +126,7 @@ const fetchVideos = async () => {
   // params.order = 'desc';
   // params.channelId = 'tobeimplemented';
   try {
-    const res = await axios.get('http://localhost:8080/api/v1/trend', {
+    const res = await axios.get('http://tunetrendapi.com/api/v1/trend', {
       params: params,
     });
     videos.value = res.data;
