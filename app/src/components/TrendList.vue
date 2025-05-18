@@ -38,12 +38,17 @@
     <div v-if="loading">読み込み中...</div>
 
     <!-- 動画リスト -->
-    <div v-else class="video-grid">
-      <div v-for="video in videos" :key="video.videoId" class="video-card">
+    <div v-for="video in videos" :key="video.videoId" class="video-card">
+      <a :href="`https://www.youtube.com/watch?v=${video.videoId}`" target="_blank">
+        <img :src="video.thumbnail" :alt="video.videoTitle">
+      </a>
+      <div class="video-info">
         <a :href="`https://www.youtube.com/watch?v=${video.videoId}`" target="_blank">
-          <img :src="video.thumbnail" :alt="video.videoTitle" >
           <p>{{ video.videoTitle }}</p>
         </a>
+        <p class="text-xs text-gray-500">
+          {{ video.viewcount }} 回視聴・{{ formatDate(video.publishedAt) }}
+        </p>
       </div>
     </div>
 
@@ -73,13 +78,23 @@
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
+const formatDate = (isoString) => {
+  const date = new Date(isoString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // 月は0始まり
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
+};
+
 const categoryTabs = [
   { label: '歌ってみた', query: '歌ってみた' },
   { label: 'ボカロオリジナル', query: 'ボカロオリジナル' },
 ];
 
 const seasonTabs = [
-  { label: '直近（７日）', season: 'recent', range: 7 },
+  { label: '直近（7日）', season: 'recent', range: 7 },
+  { label: '直近（1ヶ月）', season: 'recent', range: 30 },
+  { label: '直近（3ヶ月）', season: 'recent', range: 90 },
   { label: '直近（半年）', season: 'recent', range: 180 },
   { label: '2025春', season: 'spring', year: '2025' },
   { label: '2024冬', season: 'winter', year: '2024' },
@@ -126,7 +141,7 @@ const fetchVideos = async () => {
   // params.order = 'desc';
   // params.channelId = 'tobeimplemented';
   try {
-    const res = await axios.get('http://tunetrendapi.com/api/v1/trend', {
+    const res = await axios.get('https://cl.tunetrendapi.com/api/v1/trend', {
       params: params,
     });
     videos.value = res.data;
@@ -161,6 +176,10 @@ onMounted(fetchVideos);
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  overflow-x: visible;      /* 横スクロール有効化 */
+  flex-wrap: wrap;
+  -webkit-overflow-scrolling: touch; /* iOS の慣性スクロール対応 */
+  scrollbar-width: none; /* Firefox: スクロールバー非表示 */
 }
 
 .tab-button {
@@ -178,18 +197,61 @@ onMounted(fetchVideos);
 
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
+  justify-items: center;
+}
+
+.video-card {
+  display: flex;
+  align-items: flex-start; /* 上揃えにする */
+  gap: 1rem; /* 画像とテキストの間にスペース */
+  max-width: 600px;
 }
 
 .video-card img {
-  width: 100%;
+  max-width: 240px;
+  height: auto;
   border-radius: 8px;
+}
+
+.video-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
 }
 
 .video-card p {
   margin-top: 0.5rem;
   font-size: 0.9rem;
-  text-align: center;
+  text-align: left;
 }
+
+.pagination {
+  display: flex;
+  justify-content: center;  /* 横方向中央寄せ */
+  align-items: center;      /* 縦方向中央揃え */
+  gap: 1rem;                /* ボタン間の間隔 */
+  margin-top: 1.5rem;       /* 上の余白 */
+}
+
+.pagination-button {
+  padding: 0.5rem 1rem;
+  border: none;
+  background-color: #eee;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.pagination-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.page-number {
+  font-weight: bold;
+}
+
 </style>
