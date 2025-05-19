@@ -37,18 +37,48 @@
     <!-- 読み込み中表示 -->
     <div v-if="loading">読み込み中...</div>
 
+    <!-- 確認ダイアログ -->
+    <div v-if="showConfirmDialog" class="confirm-dialog">
+      <div class="confirm-dialog-content">
+        <p>今後この動画を非表示にしますか？</p>
+        <div class="confirm-buttons">
+          <button class="cancel-button" @click="cancelHideVideo">キャンセル</button>
+          <button class="confirm-button" @click="confirmHideVideo">OK</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 動画リスト -->
-    <div v-for="video in videos" :key="video.videoId" class="video-card">
-      <a :href="`https://www.youtube.com/watch?v=${video.videoId}`" target="_blank">
-        <img :src="video.thumbnail" :alt="video.videoTitle">
-      </a>
-      <div class="video-info">
+    <div
+      v-for="video in videos"
+      :key="video.videoId"
+      class="video-card"
+      :class="{ 'swiping': video.videoId === swipingVideoId }"
+      @touchstart="handleTouchStart($event, video.videoId)"
+      @touchmove="handleTouchMove($event, video.videoId)"
+      @touchend="handleTouchEnd(video.videoId)"
+    >
+      <!-- スワイプで表示されるゴミ箱アイコン (モバイル) - コンテンツの下に配置 -->
+      <div class="swipe-action">
+        <button class="trash-button" @click="showHideConfirmation(video.videoId)">
+          <span class="trash-icon">🗑️</span>
+        </button>
+      </div>
+
+      <div class="video-content">
         <a :href="`https://www.youtube.com/watch?v=${video.videoId}`" target="_blank">
-          <p>{{ video.videoTitle }}</p>
+          <img :src="video.thumbnail" :alt="video.videoTitle">
         </a>
-        <p class="text-xs text-gray-500">
-          {{ video.viewcount }} 回視聴・{{ formatDate(video.publishedAt) }}
-        </p>
+        <div class="video-info">
+          <a :href="`https://www.youtube.com/watch?v=${video.videoId}`" target="_blank">
+            <p>{{ video.videoTitle }}</p>
+          </a>
+          <p class="text-xs text-gray-500">
+            {{ video.viewcount }} 回視聴・{{ formatDate(video.publishedAt) }}
+          </p>
+        </div>
+        <!-- 非表示ボタン (PC) -->
+        <button class="hide-button desktop-only" @click="showHideConfirmation(video.videoId)">×</button>
       </div>
     </div>
 
@@ -119,6 +149,19 @@ const currentPage = ref(1);
 const videos = ref([]);
 const loading = ref(false);
 
+// 非表示機能のための変数
+const showConfirmDialog = ref(false);
+const selectedVideoId = ref(null);
+const swipingVideoId = ref(null);
+const touchStartX = ref(0);
+const swipeThreshold = 160; // スワイプを検出する閾値（ピクセル）
+const isMobile = ref(false);
+
+// デバイスタイプの確認
+const checkDeviceType = () => {
+  isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 const fetchVideos = async () => {
   loading.value = true;
   const params = {};
@@ -136,10 +179,6 @@ const fetchVideos = async () => {
   params.pageSize = 20;
   params.page = currentPage.value;
 
-  // TODO: API 実装後に実装
-  // params.statType = 'count';
-  // params.order = 'desc';
-  // params.channelId = 'tobeimplemented';
   try {
     const res = await axios.get('https://cl.tunetrendapi.com/api/v1/trend', {
       params: params,
@@ -160,15 +199,99 @@ const prevPage = () => {
   if (currentPage.value > 1) {
     currentPage.value--;
     fetchVideos();
+    // ページトップへスクロール
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth', // スムーズスクロール
+    });
   }
 };
 
 const nextPage = () => {
   currentPage.value++;
   fetchVideos();
+  // ページトップへスクロール
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth', // スムーズスクロール
+  });
 };
 
-onMounted(fetchVideos);
+// タッチイベントハンドラー（モバイル用スワイプ機能）
+const handleTouchStart = (event, _videoId) => {
+  touchStartX.value = event.touches[0].clientX;
+  swipingVideoId.value = null;
+};
+
+const handleTouchMove = (event, videoId) => {
+  if (!isMobile.value) return;
+
+  const touchX = event.touches[0].clientX;
+  const diff = touchX - touchStartX.value;
+
+  // 右スワイプのみ検出（diff > 0）
+  if (diff > 0 && diff > swipeThreshold / 2) {
+    swipingVideoId.value = videoId;
+  }
+  else {
+    swipingVideoId.value = null;
+  }
+};
+
+const handleTouchEnd = (videoId) => {
+  if (swipingVideoId.value === videoId) {
+    // スワイプ後は自動的に元の位置に戻る
+    // ゴミ箱アイコンはクリックで操作する
+    setTimeout(() => {
+      swipingVideoId.value = null;
+    }, 2000);
+  }
+};
+
+// 非表示確認ダイアログを表示
+const showHideConfirmation = (videoId) => {
+  selectedVideoId.value = videoId;
+  showConfirmDialog.value = true;
+};
+
+// 非表示をキャンセル
+const cancelHideVideo = () => {
+  showConfirmDialog.value = false;
+  selectedVideoId.value = null;
+};
+
+// 非表示を確定
+const confirmHideVideo = async () => {
+  if (!selectedVideoId.value) return;
+
+  try {
+    await axios.put('https://cl.tunetrendapi.com/api/v1/video/hide', {}, {
+      params: {
+        videoId: selectedVideoId.value,
+        value: true,
+      },
+    });
+
+    // 成功したら動画リストから削除
+    videos.value = videos.value.filter(video => video.videoId !== selectedVideoId.value);
+
+    showConfirmDialog.value = false;
+    selectedVideoId.value = null;
+  }
+  catch (err) {
+    console.error('Failed to hide video:', err);
+    alert('動画の非表示設定に失敗しました。');
+  }
+};
+
+onMounted(() => {
+  checkDeviceType();
+  fetchVideos();
+
+  // ウィンドウサイズが変更されたときにデバイスタイプを再チェック
+  window.addEventListener('resize', checkDeviceType);
+});
+
 </script>
 
 <style scoped>
@@ -203,10 +326,62 @@ onMounted(fetchVideos);
 }
 
 .video-card {
+  position: relative;
   display: flex;
-  align-items: flex-start; /* 上揃えにする */
-  gap: 1rem; /* 画像とテキストの間にスペース */
+  align-items: flex-start;
+  gap: 1rem;
   max-width: 600px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.video-content {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+  transition: transform 0.3s ease;
+}
+
+.video-card.swiping .video-content {
+  transform: translateX(80px);
+}
+
+.swipe-action {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  background-color: #ff4f4f;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.video-card.swiping .swipe-action {
+  opacity: 1;
+}
+
+.trash-button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trash-icon {
+  font-size: 1.5rem;
 }
 
 .video-card img {
@@ -220,6 +395,7 @@ onMounted(fetchVideos);
   flex-direction: column;
   justify-content: space-between;
   text-align: left;
+  flex-grow: 1;
 }
 
 .video-card p {
@@ -228,12 +404,74 @@ onMounted(fetchVideos);
   text-align: left;
 }
 
+.hide-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* 確認ダイアログ */
+.confirm-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.confirm-dialog-content {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  max-width: 300px;
+  width: 100%;
+  text-align: center;
+}
+
+.confirm-buttons {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 1.5rem;
+}
+
+.cancel-button, .confirm-button {
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cancel-button {
+  background-color: #eee;
+}
+
+.confirm-button {
+  background-color: #ff4f4f;
+  color: white;
+}
+
 .pagination {
   display: flex;
-  justify-content: center;  /* 横方向中央寄せ */
-  align-items: center;      /* 縦方向中央揃え */
-  gap: 1rem;                /* ボタン間の間隔 */
-  margin-top: 1.5rem;       /* 上の余白 */
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
 }
 
 .pagination-button {
@@ -254,4 +492,20 @@ onMounted(fetchVideos);
   font-weight: bold;
 }
 
+/* メディアクエリ */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .video-card img {
+    max-width: 160px;
+  }
+}
+
+@media (min-width: 769px) {
+  .swipe-action {
+    display: none;
+  }
+}
 </style>
