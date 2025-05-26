@@ -10,6 +10,7 @@
         @click="() => {
           currentCategory = tab.query;
           currentRange = tab.range;
+          currentPage = 1;
           fetchVideos();
         }"
       >
@@ -27,6 +28,7 @@
           currentSeason = tab.season;
           currentYear = tab.year;
           currentRange = tab.range;
+          currentPage = 1;
           fetchVideos();
         }"
       >
